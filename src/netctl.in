@@ -31,15 +31,15 @@ sd_escape() {
     while [[ "$*" =~ [^[:alnum:].:_/\\] ]]; do
         set -- "${@//$BASH_REMATCH/$(printf '\\x%x' "'$BASH_REMATCH")}"
     done
-    printf '%s\n' "${@//\//-}"
+    printf "%s\n" "${@//\//-}"
 }
 
 # Wrapper around systemctl to convert profile names to unit names
 sd_call() {
-    local command=$1
+    local command="$1"
     shift
     set -- $(sd_escape "$@")
-    systemctl $command $(printf 'netctl@%s.service\n' "$@")
+    systemctl "$command" "$(printf 'netctl@%s.service\n' "$@")"
 }
 
 list() {
@@ -47,12 +47,12 @@ list() {
     list_files "$profile_dir" | while read -r Profile; do
         sd_call "is-active --quiet" "$Profile" &> /dev/null
         # Make the return value boolean
-        printf '%s %s\n' "${indicators[!! $?]}" "$Profile"
+        printf "%s %s\n" "${indicators[!! $?]}" "$Profile"
     done
 }
 
 store() {
-    mkdir -p "$(dirname "$state_file")"
+    mkdir -p "$(dirname $state_file)"
     list_files "$profile_dir" | while read -r Profile; do
         if sd_call "is-active --quiet" "$Profile" &> /dev/null; then
             printf "%s\n" "$Profile"
@@ -62,9 +62,9 @@ store() {
 
 restore() {
     if [[ ! -r $state_file ]]; then
-        exit_error "Could not read state file '$state_file'"
+        report error "Could not read state file $state_file"
     elif [[ ! -s $state_file ]]; then
-        report_debug "No profiles to restore in state file '$state_file'"
+        report debug "No profiles to restore in state file $state_file"
     else
         mapfile -t Profiles < "$state_file"
         do_debug sd_call start "${Profiles[@]}"
@@ -81,14 +81,14 @@ stop_all() {
 switch_to() {
     cd "$profile_dir"
     if [[ ! -r $1 ]]; then
-        exit_error "Profile '$1' does not exist or is not readable"
+        report error "Profile '$1' does not exist or is not readable"
     fi
     # We assume interface names are not quoted
     # Using read removes leading whitespace
     read InterfaceLine < \
       <(grep -om1 "^[[:space:]]*Interface=[[:alnum:]:._-]\+" "$1")
     if [[ -z $InterfaceLine ]]; then
-        exit_error "Profile '$1' does not specify an interface"
+        report error "Profile '$1' does not specify an interface"
     fi
     mapfile -t AllProfiles < <(list_files "$profile_dir")
     mapfile -t Profiles < <(grep -Fl "$InterfaceLine" "${AllProfiles[@]}")
@@ -100,14 +100,14 @@ switch_to() {
 unit_enable() {
     local unit="@systemdsystemconfdir@/netctl@$(sd_escape "$1").service"
     if [[ -e $unit ]]; then
-        report_error "A unit file for profile '$1' already exists"
+        report error "A unit file for profile '$1' already exists"
         return 1
     fi
     load_profile "$1"
-    echo ".include @systemdsystemunitdir@/netctl@.service" > "$unit"
+    printf "%s\n" ".include @systemdsystemunitdir@/netctl@.service" > "$unit"
     echo -e "\n[Unit]" >> "$unit"
-    [[ -n $Description ]] && echo "Description=$Description" >> "$unit"
-    [[ -v BindsToInterfaces ]] || BindsToInterfaces=$Interface
+    [[ -n $Description ]] && printf "%s\n" "Description=$Description" >> "$unit"
+    [[ -v BindsToInterfaces ]] || BindsToInterfaces="$Interface"
     if (( ${#BindsToInterfaces[@]} )); then
         : ${InterfaceRoot=sys/subsystem/net/devices/}
         printf "BindsTo=$(sd_escape "$InterfaceRoot")%s.device\n" \
@@ -116,11 +116,11 @@ unit_enable() {
                $(sd_escape "${BindsToInterfaces[@]}") >> "$unit"
     fi
     if (( ${#After[@]} )); then
-        printf 'After="netctl@%s.service"\n' \
+        printf "%s\n" "After="netctl@%s.service"\n" \
                $(sd_escape "${After[@]}") >> "$unit"
     fi
     mkdir -p "@systemdsystemconfdir@/multi-user.target.wants"
-    echo "ln -s '$unit' '${unit/system\//system/multi-user.target.wants/}'"
+    printf "%s" "ln -s '$unit' '${unit/system\//system/multi-user.target.wants/}'"
     ln -s "$unit" "${unit/system\//system/multi-user.target.wants/}"
     systemctl daemon-reload
 }
@@ -131,7 +131,7 @@ unit_disable() {
         sd_call disable "$1"
     fi
     if [[ ! -f $unit ]]; then
-        report_error "No regular unit file found for profile '$1'"
+        report error "No regular unit file found for profile '$1'"
         return 1
     fi
     do_debug rm "$unit"
@@ -143,7 +143,7 @@ case $# in
   1)
     case $1 in
       --version)
-        report_notice "netctl version $netctl_version";;
+        report notice "netctl version $netctl_version";;
       --help)
         usage;;
       list)
@@ -154,7 +154,7 @@ case $# in
       stop-all)
         stop_all;;
       *)
-        exit_error "$(usage)";;
+        report error "$(usage)";;
     esac;;
   2)
     case $1 in
@@ -171,10 +171,10 @@ case $# in
         unit_disable "$2"
         unit_enable "$2";;
       *)
-        exit_error "$(usage)";;
+        report error "$(usage)";;
     esac;;
   *)
-    exit_error "$(usage)";;
+    report error "$(usage)";;
 esac
 
 

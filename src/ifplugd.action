@@ -53,7 +53,7 @@ case "$2" in
     fi
     ;;
   *)
-    printf "%s" "Wrong arguments" >&2
+    printf "%s\n" "Wrong arguments" >&2
     ;;
 esac
 

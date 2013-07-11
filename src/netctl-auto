@@ -12,8 +12,8 @@ startstop="$1"
 interface="$2"
 pidfile="$state_dir/wpa_actiond_$interface.pid"
 shift 2
-action_script=$subr_dir/auto.action
-actiond_args=(-p /run/wpa_supplicant -i "$interface" -P "$pidfile" -a "$action_script")
+action_script="$subr_dir/auto.action"
+actiond_args="(-p /run/wpa_supplicant -i $interface -P $pidfile -a $action_script)"
 
 case "$startstop" in
   start)
@@ -34,7 +34,7 @@ case "$startstop" in
         report debug "Examining profile $profile"
         (
           source "$profile_dir/$profile"
-          [[ $Interface == "$interface" ]] || continue
+          [[ $Interface == $interface ]] || continue
           is_yes "${ExcludeAuto:-no}" && exit 1
           [[ $Connection != "wireless" ]] && exit 1
           : ${Security:=none}

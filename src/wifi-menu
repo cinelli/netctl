@@ -67,7 +67,7 @@ init_entries()
         else
             ENTRIES[i]="-"  # Not present
         fi
-        if [[ $ssid = "$CONNECTION" ]]; then
+        if [[ $ssid = $CONNECTION ]]; then
             ENTRIES[i]="!"  # Currently connected
         fi
         if [[ $flags =~ WPA2|WPA|WEP ]]; then
@@ -127,7 +127,7 @@ create_profile()
     Security=$security
     ESSID=$(printf "%q" "$1")
     IP=dhcp
-    ${key+Key=$key}
+    "${key+Key=$key}"
     EOF
     printf "%s" "$PROFILE"
     return 0
@@ -138,7 +138,7 @@ create_profile()
 connect_to_ssid()
 {
     local msg
-    PROFILE=$(ssid_to_profile $1)
+    PROFILE="$(ssid_to_profile $1)"
     if [[ $? -ne 0 ]]; then
         PROFILE="$(create_profile $1)" || return "$?"
         NEW_PROFILE=1
@@ -209,13 +209,13 @@ if [[ ! -d /sys/class/net/$INTERFACE ]]; then
     report error "No such interface: $INTERFACE"
 fi
 
-echo -n "Scanning for networks... "
+printf "%s\n" "Scanning for networks... "
 CONNECTION=$(wpa_call "$INTERFACE" status 2> /dev/null | grep -m 1 "^ssid=")
 CONNECTION=${CONNECTION#ssid=}
 NETWORKS=$(wpa_supplicant_scan "$INTERFACE" 3,4,5)
 if [[ $? -eq 0 ]]; then
     trap 'rm -f "$NETWORKS"' EXIT
-    echo "done"
+    printf "%s" "done"
     init_profiles "$INTERFACE"
     init_entries "$NETWORKS"
     MSG="Select the network you wish to use
@@ -224,15 +224,15 @@ Flags description:
  + - automatically generated profile present
  - - no profile present
  ! - active connection present"
-    CHOICE=$(dialog --column-separator : --menu "$MSG" 24 50 12 \
+    CHOICE="$(dialog --column-separator : --menu $MSG 24 50 12 \"
         "${ENTRIES[@]}" --stdout)
-    RETURN=$?
+    RETURN="$?"
     if (( RETURN == 0 )); then
         connect_to_ssid "$CHOICE"
-        RETURN=$?
+        RETURN="$?"
     fi
 else
-    printf "%s" "failed"
+    printf "%s" "Failed"
     RETURN=3
 fi
 
