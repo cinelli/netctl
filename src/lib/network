@@ -59,8 +59,7 @@ case $1 in
         report error "Failed to bring the network up for profile '$Profile'"
         exit 1
     fi
-    # JP: sandbox the eval
-    if ! ( eval $ExecUpPost ); then
+    if ! "${ExecUpPost[@]}"; then
         report error "ExecUpPost failed for network profile '$Profile'"
         # Failing ExecUpPost will take the connection down
         "${Connection}_down"
@@ -70,8 +69,7 @@ case $1 in
   ;;
   stop)
     report notice "Stopping network profile '$Profile'..."
-    # JP: sandbox the eval
-    if ! ( eval $ExecDownPre ); then
+    if ! "${ExecDownPre[@]}"; then
         report error "ExecDownPre failed for network profile '$Profile'"
         # Failing ExecDownPre will leave the profile active
         exit 1
