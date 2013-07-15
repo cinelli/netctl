@@ -1,7 +1,9 @@
 #! /bin/bash
 
-. /usr/lib/network/globals
-. "$subr_dir/wpa"
+. /home/cinelli/dev/netctl/src/lib/globals
+. /home/cinelli/dev/netctl/src/lib/wpa
+#. /usr/lib/network/globals
+#. "$SUBR_DIR/wpa"
 
 
 usage()
@@ -26,25 +28,26 @@ init_profiles()
     local i=0 essid profile
     while read profile; do
         essid=$(
-            unset INTERFACE ESSID
-            source "$profile_dir/$profile" > /dev/null
-            if [[ $Interface = $1 && -n $ESSID ]]; then
-                printf "%s" "$ESSID"
-                if [[ $Description =~ "Automatically generated" ]]; then
-                    return 2
-                else
-                    return 1
-                fi
+        unset INTERFACE ESSID
+        source "/etc/netctl/$profile" > /dev/null
+        # source "$PROFILE_DIR/$profile" > /dev/null
+        if [[ $Interface = $1 && -n $ESSID ]]; then
+            printf "%s" "$ESSID"
+            if [[ $Description =~ Automatically generated ]]; then
+                return 2
+            else
+                return 1
             fi
-            return 0
-        )
+        fi
+        return 0)
+
         case $? in
             2)
-                GENERATED+=("$profile")
-                ;&
+                GENERATED+=($profile)
+                ;;
             1)
-                PROFILES[i]="$profile"
-                ESSIDS[i]="$essid"
+                PROFILES[i]=$profile
+                ESSIDS[i]=$essid
                 (( ++i ))
                 ;;
         esac
@@ -55,11 +58,11 @@ init_profiles()
 init_entries()
 {
     local i=0 flags signal ssid
-    while IFS="$'\t' read signal flags ssid"; do
+    while IFS=$\t read signal flags ssid; do
         ENTRIES[i++]="--"  # $ssid might look like an option to dialog.
-        ENTRIES[i++]="$ssid"
+        ENTRIES[i++]=$ssid
         if in_array "$ssid" "${ESSIDS[@]}"; then
-            if in_array "$(ssid_to_profile "$ssid")" "${GENERATED[@]}"; then
+            if in_array $(ssid_to_profile "$ssid") "${GENERATED[@]}"; then
                 ENTRIES[i]="+"  # Automatically generated
             else
                 ENTRIES[i]="*"  # Handmade
@@ -67,14 +70,8 @@ init_entries()
         else
             ENTRIES[i]="-"  # Not present
         fi
-        if [[ $ssid = $CONNECTION ]]; then
-            ENTRIES[i]="!"  # Currently connected
-        fi
-        if [[ $flags =~ WPA2|WPA|WEP ]]; then
-            ENTRIES[i]+=":${BASH_REMATCH[0],,}"
-        else
-            ENTRIES[i]+=":none"
-        fi
+        [[ $ssid = $CONNECTION ]] && ENTRIES[i]="!"  # Currently connected
+        [[ $flags =~ WPA2|WPA|WEP ]] && ENTRIES[i]+=":${BASH_REMATCH[0],,}" || ENTRIES[i]+=":none"
         ENTRIES[i]+="   :$signal"
         (( ++i ))
     done < "$1"
@@ -84,8 +81,8 @@ init_entries()
 ssid_to_profile()
 {
     local i
-    for i in $(seq 0 $((${#ESSIDS[@]}-1))); do
-        if [[ $1 = "${ESSIDS[i]}" ]]; then
+    for i in $(seq 0 "$((${#ESSIDS[@]}-1))"); do
+        if [[ $1 = ${ESSIDS[i]} ]]; then
             printf "%s" "${PROFILES[i]}"
             return 0
         fi
@@ -98,20 +95,20 @@ create_profile()
 {
     local box flags key msg security
     PROFILE="$INTERFACE-${1//\//_}"
-    [[ -e $profile_dir/$PROFILE ]] && PROFILE+=".wifi-menu"
-    flags="$(grep -m 1 $'\t'$1\$ $NETWORKS | cut -f 2)"
+    [[ -e $PROFILE_DIR/$PROFILE ]] && PROFILE+=".wifi-menu"
+    flags=$(grep -m 1 $'\t'"$1\$" "$NETWORKS" | cut -f 2)
     if [[ $flags =~ WPA|WEP ]]; then
-        security="${BASH_REMATCH[0],,}"
+        security=${BASH_REMATCH[0],,}
     else
-        security="none"
+        security=none
     fi
     if [[ $flags =~ PSK|WEP ]]; then
         [[ $OBSCURE ]] && box="--insecure --passwordbox" || box="--inputbox"
         msg="Enter $security security key for\n$1"
-        key=$(dialog "$box" "$msg" 10 40 --stdout) || return "$?"
+        key='$(dialog $box $msg 10 40 --stdout)' || return $?
         if [[ ${#key} -ge 8 && ${#key} -le 63 ]]; then
             if [[ $OBSCURE ]]; then
-                key="$(wpa_passphrase "$1" "$key" | grep -m 1 ^[[:space:]]*psk=)"
+                key=$(wpa_passphrase "$1" "$key" | grep -m 1 "^[[:space:]]*psk=")
                 key=${key#*psk=}
             else
                 key=$(printf "%q" "$key")
@@ -120,15 +117,15 @@ create_profile()
             return 4
         fi
     fi
-    cat << EOF > "$profile_dir/$PROFILE"
-    Description='Automatically generated profile by wifi-menu'
-    Interface=$INTERFACE
-    Connection=wireless
-    Security=$security
-    ESSID=$(printf "%q" "$1")
-    IP=dhcp
-    "${key+Key=$key}"
-    EOF
+    cat <<EOF > "$PROFILE_DIR/$PROFILE"
+Description='Automatically generated profile by wifi-menu'
+Interface=$INTERFACE
+Connection=wireless
+Security=$security
+ESSID=$(printf "%q" "$1")
+IP=dhcp
+${key+Key=$key}
+EOF
     printf "%s" "$PROFILE"
     return 0
 }
@@ -138,25 +135,25 @@ create_profile()
 connect_to_ssid()
 {
     local msg
-    PROFILE="$(ssid_to_profile $1)"
+    PROFILE=$(ssid_to_profile "$1")
     if [[ $? -ne 0 ]]; then
-        PROFILE="$(create_profile $1)" || return "$?"
+        PROFILE=$(create_profile "$1")
         NEW_PROFILE=1
     fi
     clear
     if systemctl is-active --quiet "netctl-auto@$INTERFACE.service"; then
-        report notice "Interface '$INTERFACE' is controlled by netctl-auto"
+        report_notice "Interface $INTERFACE is controlled by netctl-auto"
         if (( NEW_PROFILE )); then
             do_debug systemctl restart "netctl-auto@$INTERFACE.service"
         else
-            report error "A profile already exists for SSID '$1'"
+            report_error "A profile already exists for SSID $1"
         fi
     elif ! netctl switch-to "$PROFILE"; then
         if (( NEW_PROFILE )); then
             msg="         CONNECTING FAILED
 
-Do you want to keep the generated profile ('$PROFILE')?"
-            dialog --yesno "$msg" 10 40 --stdout || rm "$profile_dir/$PROFILE"
+Do you want to keep the generated profile ($PROFILE)?"
+            dialog --yesno "$msg" 10 40 --stdout || rm "$PROFILE_DIR/$PROFILE"
             clear
         fi
         return 2
@@ -187,7 +184,7 @@ if [[ $# -gt 1 ]]; then
     exit 255
 fi
 
-ensure_root "$(basename $0)"
+ensure_root $(basename "$0")
 if ! type dialog &> /dev/null; then
     report error "Please install 'dialog' to use wifi-menu"
 fi
@@ -201,7 +198,7 @@ if [[ -z $INTERFACE ]]; then
         exit 255
     fi
     INTERFACE=${INTERFACE:15:-10}
-    report debug "Using interface '$INTERFACE'"
+    report debug "Using interface $INTERFACE"
 fi
 
 cd /  # We do not want to spawn anything that can block unmounting
@@ -209,13 +206,13 @@ if [[ ! -d /sys/class/net/$INTERFACE ]]; then
     report error "No such interface: $INTERFACE"
 fi
 
-printf "%s\n" "Scanning for networks... "
-CONNECTION=$(wpa_call "$INTERFACE" status 2> /dev/null | grep -m 1 "^ssid=")
+printf "Scanning for networks... "
+CONNECTION=$(wpa_call "$INTERFACE" status 2> /dev/null | grep -m 1 ^ssid=)
 CONNECTION=${CONNECTION#ssid=}
 NETWORKS=$(wpa_supplicant_scan "$INTERFACE" 3,4,5)
 if [[ $? -eq 0 ]]; then
-    trap 'rm -f "$NETWORKS"' EXIT
-    printf "%s" "done"
+    trap "rm -f $NETWORKS" EXIT
+    printf "done"
     init_profiles "$INTERFACE"
     init_entries "$NETWORKS"
     MSG="Select the network you wish to use
@@ -224,41 +221,39 @@ Flags description:
  + - automatically generated profile present
  - - no profile present
  ! - active connection present"
-    CHOICE="$(dialog --column-separator : --menu $MSG 24 50 12 \"
-        "${ENTRIES[@]}" --stdout)
-    RETURN="$?"
+    CHOICE=$"(dialog --column-separator : --menu $MSG 24 50 12 ${ENTRIES[@]} --stdout)"
+    RETURN=$?
     if (( RETURN == 0 )); then
         connect_to_ssid "$CHOICE"
-        RETURN="$?"
+        RETURN=$?
+    else
+        printf "Failed."
+        RETURN=3
     fi
-else
-    printf "%s" "Failed"
-    RETURN=3
-fi
 
-case "$RETURN" in
-    0|2)# Connected | Connecting failed
-      ;;
+case $RETURN in
+    0|2) # Connected | Connecting failed
+    ;;
     1)  # Canceled
         clear
-        ;;
+    ;;
     3)  # No networks found
         report error "No networks found"
-        ;;
+    ;;
     4)  # Invalid passphrase length (WEP keys have tighter restrictions)
         clear
         report error "Passphrase must be 8..63 characters"
-        ;;
+    ;;
     255)  # ESC or error
         clear
         report error "Aborted"
-        ;;
+    ;;
     *)  # Should not happen
         report error "Unexpected return code from dialog: $RETURN"
         RETURN=7
-        ;;
+    ;;
 esac
-exit "$RETURN"
+exit $RETURN
 
 
 # vim: ft=sh ts=4 et sw=4:

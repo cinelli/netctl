@@ -8,8 +8,8 @@ fi
 . "$subr_dir/wpa"
 . "$subr_dir/rfkill"
 
-startstop="$1"
-interface="$2"
+startstop=$1
+interface=$2
 pidfile="$state_dir/wpa_actiond_$interface.pid"
 shift 2
 action_script="$subr_dir/auto.action"
@@ -36,10 +36,10 @@ case "$startstop" in
           source "$profile_dir/$profile"
           [[ $Interface == $interface ]] || continue
           is_yes "${ExcludeAuto:-no}" && exit 1
-          [[ $Connection != "wireless" ]] && exit 1
+          [[ $Connection != wireless ]] && exit 1
           : ${Security:=none}
           # Exclude wpa-config, the wpa_conf is 'complete' and does not fit in this scheme
-          [[ $Security == "wpa-config" ]] && exit 1
+          [[ $Security == wpa-config ]] && exit 1
 
           printf "%s\n" "network={" "$(wpa_make_config_block)" "id_str=\"$profile\"" "}" >> "$wpa_conf"
           report notice "Included profile $profile"
