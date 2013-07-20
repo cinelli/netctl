@@ -58,8 +58,15 @@ case "$2" in
     fi
   ;;
   *)
+<<<<<<< HEAD
     printf '%s\n' "Wrong arguments" >&2
+=======
+    echo "Wrong arguments" >&2
+>>>>>>> upstream/master
   ;;
 esac
 
 exit 1
+
+
+# vim: ft=sh ts=4 et sw=4:
